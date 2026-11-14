@@ -62,4 +62,23 @@ async function shutdown() {
   await Promise.allSettled([...queue.tails.values()]); store.close(); unlock();
 }
 process.once('SIGINT', () => void shutdown()); process.once('SIGTERM', () => void shutdown());
-client.login(process.env.DISCORD_TOKEN).catch(error => { console.error('Connexion Discord impossible', error.code || 'token/intents/réseau'); store.close(); process.exitCode = 1; });
+client.login(process.env.DISCORD_TOKEN).catch(error => {
+  const detail = String(error.message || 'Erreur sans description')
+    .replaceAll(process.env.DISCORD_TOKEN, '[TOKEN MASQUE]').slice(0, 300);
+  const code = String(error.code || error.name || 'inconnu')
+    .replaceAll(process.env.DISCORD_TOKEN, '[TOKEN MASQUE]').slice(0, 80);
+  console.error(`Connexion Discord impossible [${code}] : ${detail}`);
+  if (/disallowed.?intents|used disallowed intents|4014/i.test(`${code} ${detail}`)) {
+    console.error('Developer Portal > votre application > Bot > Privileged Gateway Intents : activez SERVER MEMBERS INTENT et MESSAGE CONTENT INTENT, enregistrez puis relancez DSB.');
+  } else if (/tokeninvalid|invalid token|authentication failed|4004/i.test(`${code} ${detail}`)) {
+    console.error('Verifiez DISCORD_TOKEN dans votre fichier .env local : utilisez le token de la page Bot, pas le Client Secret. Ne le partagez pas.');
+  } else {
+    console.error('Verifiez le detail ci-dessus, les intents du Developer Portal et votre connexion reseau.');
+  }
+  stopping = true;
+  clearInterval(timer);
+  client.destroy();
+  store.close();
+  unlock();
+  process.exitCode = 1;
+});
